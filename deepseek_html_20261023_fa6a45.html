@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="uz" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>SaveAsFile — shaxsiy fayl saqlash</title>
+
+<!-- ============================================================
+     CHEKLOVLAR (muhim):
+     - Bu — to'liq client-side ilova. Barcha ma'lumotlar faqat shu
+       brauzerda (IndexedDB) saqlanadi, hech qayerga yuborilmaydi.
+     - Parol xeshi (SHA-256 + salt) brauzerda saqlanadi — bu demo
+       darajasidagi xavfsizlik, production uchun emas.
+     - Ishlab chiqarish (production) uchun real backend
+       (Node.js/Python + DB + JWT) kerak.
+     - Brauzer xotirasi (site data) tozalansa — barcha ma'lumotlar
+       yo'qoladi. UI'da bu haqda ogohlantirish ko'rsatilgan.
+     ============================================================ -->
+
+<!-- ========== STYLES ========== -->
+<style>
+  /* ---------- Design tokens ---------- */
+  :root{
+    --bg:#f5f7fb;
+    --bg-soft:#eef1f7;
+    --surface:#ffffff;
+    --surface-2:#f2f4f9;
+    --surface-3:#e9edf5;
+    --border:#e3e8f0;
+    --border-strong:#d1d8e4;
+    --text:#0f172a;
+    --text-2:#475569;
+    --muted:#7c8798;
+    --accent:#4f46e5;
+    --accent-2:#6366f1;
+    --accent-soft:#eef2ff;
+    --on-accent:#ffffff;
+    --danger:#dc2626;
+    --danger-soft:#fee2e2;
+    --success:#059669;
+    --success-soft:#d1fae5;
+    --warn:#b45309;
+    --warn-soft:#fef3c7;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 6px 20px rgba(15,23,42,.08);
+    --shadow-lg:0 24px 60px rgba(15,23,42,.20);
+    --radius:16px;
+    --radius-sm:10px;
+    --radius-xs:8px;
+    --sidebar-w:270px;
+    --header-h:66px;
+    --tok-kw:#a21caf;
+    --tok-str:#0f766e;
+    --tok-com:#8b98ad;
+    --tok-num:#b45309;
+    --tok-fn:#1d4ed8;
+    --tok-tag:#0369a1;
+    --tok-attr:#b45309;
+    --scrollbar:#c9d2e0;
+  }
+  [data-theme="dark"]{
+    --bg:#0a0f1d;
+    --bg-soft:#0e1526;
+    --surface:#121a2c;
+    --surface-2:#18213a;
+    --surface-3:#1f2a46;
+    --border:#243050;
+    --border-strong:#324066;
+    --text:#e8eefc;
+    --text-2:#b8c4dc;
+    --muted:#8795b2;
+    --accent:#6366f1;
+    --accent-2:#818cf8;
+    --accent-soft:#1d2648;
+    --on-accent:#ffffff;
+    --danger:#f87171;
+    --danger-soft:#3a1b1b;
+    --success:#34d399;
+    --success-soft:#0f3a2c;
+    --warn:#fbbf24;
+    --warn-soft:#3a2a10;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+    --shadow-md:0 6px 20px rgba(0,0,0,.45);
+    --shadow-lg:0 24px 60px rgba(0,0,0,.6);
+    --tok-kw:#d8b4fe;
+    --tok-str:#6ee7b7;
+    --tok-com:#7c8aa5;
+    --tok-num:#fbbf24;
+    --tok-fn:#93c5fd;
+    --tok-tag:#7dd3fc;
+    --tok-attr:#fbbf24;
+    --scrollbar:#2a3757;
+  }
+
+  /* ---------- Reset ---------- */
+  *,*::before,*::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:'Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    font-size:15px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    transition:background-color .22s ease,color .22s ease;
+    overflow:hidden;
+  }
+  body.modal-open{overflow:hidden}
+  h1,h2,h3,p{margin:0}
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+  input,select,textarea{font:inherit;color:inherit}
+  a{color:var(--accent)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:99px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .icon{display:inline-flex;width:20px;height:20px;flex:0 0 auto}
+  .icon svg{width:100%;height:100%;display:block}
+  .muted{color:var(--muted)}
+  .small{font-size:12.5px}
+
+  /* ---------- Buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:9px 16px;border-radius:var(--radius-sm);
+    font-weight:600;font-size:14px;line-height:1.2;
+    border:1px solid transparent;
+    transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-sm)}
+  .btn-primary:hover{background:var(--accent-2)}
+  .btn-ghost{background:var(--surface-2);color:var(--text);border-color:var(--border)}
+  .btn-ghost:hover{background:var(--surface-3)}
+  .btn-danger{background:var(--danger);color:#fff}
+  .btn-danger:hover{filter:brightness(1.08)}
+  .btn-block{width:100%}
+  .btn[disabled]{opacity:.6;pointer-events:none}
+  .link-btn{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+
+  .icon-btn{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:38px;height:38px;border-radius:10px;color:var(--text-2);
+    transition:background-color .15s ease,color .15s ease;
+    flex:0 0 auto;
+  }
+  .icon-btn:hover{background:var(--surface-2);color:var(--text)}
+  .icon-btn:active{background:var(--surface-3)}
+
+  /* ---------- Auth screen ---------- */
+  .auth{
+    position:fixed;inset:0;display:grid;place-items:center;padding:24px;
+    background:
+      radial-gradient(900px 600px at 12% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+      radial-gradient(800px 600px at 105% 110%, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 60%),
+      var(--bg);
+    overflow:auto;
+  }
+  .auth-card{
+    width:100%;max-width:430px;background:var(--surface);
+    border:1px solid var(--border);border-radius:22px;
+    padding:32px 28px;box-shadow:var(--shadow-lg);
+    animation:pop .32s cubic-bezier(.2,.9,.3,1.1);
+  }
+  @keyframes pop{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:19px;letter-spacing:-.02em}
+  .brand-mark{
+    width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow:0 6px 16px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .auth-sub{color:var(--muted);font-size:13.5px;margin-top:8px}
+  .auth-tabs{display:flex;gap:6px;background:var(--surface-2);padding:5px;border-radius:12px;margin:22px 0 20px}
+  .auth-tab{
+    flex:1;padding:9px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted);
+    transition:background-color .18s ease,color .18s ease,box-shadow .18s ease;
+  }
+  .auth-tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
+  .auth-form{display:flex;flex-direction:column;gap:15px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field-label{font-size:12.5px;font-weight:600;color:var(--text-2);letter-spacing:.01em}
+  .input{
+    width:100%;padding:11px 13px;border-radius:11px;background:var(--surface-2);
+    border:1px solid var(--border);color:var(--text);font-size:14.5px;
+    transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease;
+  }
+  .input::placeholder{color:var(--muted)}
+  .input:focus{outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent)}
+  .pw-wrap{position:relative;display:block}
+  .pw-wrap .input{padding-right:44px}
+  .pw-toggle{
+    position:absolute;right:5px;top:50%;transform:translateY(-50%);
+    width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted);
+  }
+  .pw-toggle:hover{color:var(--text);background:var(--surface-3)}
+  .auth-note{
+    margin-top:20px;padding:12px 14px;border-radius:12px;font-size:12.5px;line-height:1.55;
+    background:var(--warn-soft);color:var(--warn);
+    border:1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+    display:flex;gap:9px;align-items:flex-start;
+  }
+  .auth-note .icon{width:17px;height:17px;margin-top:1px}
+
+  /* ---------- App shell ---------- */
+  .app{
+    display:grid;grid-template-columns:var(--sidebar-w) 1fr;
+    height:100dvh;width:100%;
+  }
+  .sidebar{
+    display:flex;flex-direction:column;gap:16px;
+    padding:16px 14px;background:var(--surface);
+    border-right:1px solid var(--border);
+    overflow-y:auto;overscroll-behavior:contain;
+    z-index:40;
+  }
+  .sidebar-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 0}
+  .sidebar-close{display:none}
+  .sidebar .btn-block{margin-top:2px}
+  .nav{display:flex;flex-direction:column;gap:3px}
+  .nav-title{
+    font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);padding:6px 10px;margin-top:4px;
+  }
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;
+    color:var(--text-2);font-size:14px;font-weight:500;text-align:left;width:100%;
+    transition:background-color .15s ease,color .15s ease;
+  }
+  .nav-item:hover{background:var(--surface-2);color:var(--text)}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .nav-item .icon{width:18px;height:18px;opacity:.9}
+  .nav-count{
+    margin-left:auto;font-size:11.5px;font-weight:700;color:var(--muted);
+    background:var(--surface-2);border-radius:99px;padding:1px 7px;min-width:22px;text-align:center;
+  }
+  .nav-item.active .nav-count{background:color-mix(in srgb, var(--accent) 18%, transparent);color:var(--accent)}
+  .sidebar-folders{display:flex;flex-direction:column;gap:2px;max-height:34vh;overflow-y:auto}
+  .folder-link{
+    display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;
+    color:var(--text-2);font-size:13.5px;width:100%;text-align:left;
+    transition:background-color .15s ease,color .15s ease;
+  }
+  .folder-link:hover{background:var(--surface-2);color:var(--text)}
+  .folder-link.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .folder-link .icon{width:17px;height:17px;color:var(--accent)}
+  .folder-link span.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sidebar-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px}
+  .storage-card{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px;
+    font-size:12.5px;color:var(--text-2);display:flex;flex-direction:column;gap:7px;
+  }
+  .storage-row{display:flex;justify-content:space-between;gap:8px}
+  .storage-row strong{color:var(--text);font-weight:700}
+  .warn-note{
+    display:flex;gap:8px;font-size:11.8px;line-height:1.45;color:var(--muted);
+    padding:0 4px;
+  }
+  .warn-note .icon{width:15px;height:15px;margin-top:1px;color:var(--warn);flex:0 0 auto}
+
+  /* ---------- Main ---------- */
+  .main{display:flex;flex-direction:column;min-width:0;height:100dvh;background:var(--bg)}
+  .topbar{
+    display:flex;align-items:center;gap:12px;padding:0 18px;height:var(--header-h);
+    background:var(--surface);border-bottom:1px solid var(--border);
+    flex:0 0 auto;
+  }
+  .menu-btn{display:none}
+  .search-wrap{position:relative;flex:1;max-width:460px}
+  .search-wrap .icon{
+    position:absolute;left:12px;top:50%;transform:translateY(-50%);
+    color:var(--muted);width:18px;height:18px;pointer-events:none;
+  }
+  .search-wrap input{
+    width:100%;padding:10px 14px 10px 38px;border-radius:11px;
+    background:var(--surface-2);border:1px solid var(--border);font-size:14px;
+    transition:border-color .15s,box-shadow .15s,background-color .15s;
+  }
+  .search-wrap input:focus{outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent)}
+  .topbar-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .select{
+    padding:9px 11px;border-radius:10px;background:var(--surface-2);
+    border:1px solid var(--border);font-size:13px;font-weight:500;cursor:pointer;
+    transition:background-color .15s,border-color .15s;
+  }
+  .select:hover{background:var(--surface-3)}
+  .select:focus{outline:none;border-color:var(--accent)}
+  .profile{position:relative}
+  .avatar{
+    width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+    font-weight:700;font-size:14px;color:#fff;letter-spacing:.02em;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow:var(--shadow-sm);
+    transition:transform .15s ease,box-shadow .15s ease;
+  }
+  .avatar:hover{transform:translateY(-1px);box-shadow:var(--shadow-md)}
+  .profile-menu{
+    position:absolute;right:0;top:calc(100% + 10px);width:250px;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    box-shadow:var(--shadow-lg);padding:8px;z-index:60;
+    animation:pop .16s ease;
+  }
+  .profile-head{padding:10px 12px;border-bottom:1px solid var(--border);margin-bottom:6px}
+  .profile-name{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .profile-email{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .menu-item{
+    display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:9px;
+    font-size:14px;font-weight:500;text-align:left;color:var(--text-2);
+    transition:background-color .15s,color .15s;
+  }
+  .menu-item:hover{background:var(--surface-2);color:var(--text)}
+  .menu-item.danger{color:var(--danger)}
+  .menu-item.danger:hover{background:var(--danger-soft)}
+
+  .content{flex:1;overflow-y:auto;padding:22px 26px 90px;overscroll-behavior:contain}
+  .breadcrumb{display:flex;align-items:center;flex-wrap:wrap;gap:2px;font-size:13.5px;margin-bottom:14px;min-height:20px}
+  .crumb{
+    padding:3px 8px;border-radius:7px;color:var(--muted);font-weight:500;
+    transition:background-color .15s,color .15s;max-width:220px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .crumb.link:hover{background:var(--surface-2);color:var(--text)}
+  .crumb.current{color:var(--text);font-weight:650}
+  .crumb-sep{color:var(--muted);opacity:.55;display:inline-flex;width:16px;height:16px}
+  .crumb-sep svg{width:100%;height:100%}
+
+  .page-head{margin-bottom:16px}
+  .page-head h1{font-size:23px;font-weight:800;letter-spacing:-.025em}
+  .page-head p{font-size:13.5px;color:var(--muted);margin-top:3px}
+
+  /* Drop zone */
+  .dropzone{
+    border:2px dashed var(--border-strong);border-radius:var(--radius);
+    padding:22px;text-align:center;background:var(--surface);
+    transition:border-color .18s ease,background-color .18s ease,transform .18s ease;
+    margin-bottom:24px;
+  }
+  .dropzone:hover{border-color:var(--accent)}
+  .dropzone.dragover{
+    border-color:var(--accent);background:var(--accent-soft);
+    transform:scale(1.005);
+  }
+  .dz-icon{
+    width:44px;height:44px;margin:0 auto 10px;border-radius:13px;display:grid;place-items:center;
+    background:var(--accent-soft);color:var(--accent);
+  }
+  .dz-title{font-weight:700;font-size:15px}
+  .dz-sub{font-size:13.5px;color:var(--muted);margin-top:3px}
+  .dz-hint{font-size:11.8px;color:var(--muted);margin-top:8px;opacity:.8}
+
+  /* Section titles */
+  .section-title{
+    font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 12px 2px;
+  }
+
+  /* Folders grid */
+  .folder-grid{
+    display:grid;gap:12px;margin-bottom:26px;
+    grid-template-columns:repeat(auto-fill,minmax(215px,1fr));
+  }
+  .folder-card{
+    position:relative;display:flex;align-items:center;gap:12px;
+    padding:13px 14px;border-radius:var(--radius);background:var(--surface);
+    border:1px solid var(--border);cursor:pointer;
+    transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+  }
+  .folder-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md);transform:translateY(-1px)}
+  .folder-card-icon{
+    width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;
+    background:var(--accent-soft);color:var(--accent);
+  }
+  .folder-card-icon .icon{width:21px;height:21px}
+  .folder-card-body{min-width:0;flex:1}
+  .folder-name{font-weight:650;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .folder-meta{font-size:12px;color:var(--muted);margin-top:1px}
+  .card-actions{display:flex;gap:2px;opacity:0;transition:opacity .15s ease}
+  .folder-card:hover .card-actions,.folder-card:focus-within .card-actions{opacity:1}
+  .card-actions .icon-btn{width:30px;height:30px;border-radius:8px}
+  .card-actions .icon-btn .icon{width:16px;height:16px}
+  .card-actions .icon-btn.danger:hover{background:var(--danger-soft);color:var(--danger)}
+
+  /* Files grid */
+  .file-grid{
+    display:grid;gap:14px;
+    grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+  }
+  .file-card{
+    position:relative;display:flex;flex-direction:column;
+    border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);
+    overflow:hidden;cursor:pointer;
+    transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+  }
+  .file-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+  .file-thumb{
+    height:112px;display:grid;place-items:center;
+    background:linear-gradient(160deg,var(--surface-2),var(--surface-3));
+    color:var(--accent);position:relative;overflow:hidden;
+  }
+  .file-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .file-thumb .icon{width:34px;height:34px;opacity:.85}
+  .thumb-badge{
+    position:absolute;left:8px;bottom:8px;font-size:10.5px;font-weight:700;
+    letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:6px;
+    background:color-mix(in srgb, var(--surface) 88%, transparent);
+    color:var(--text-2);backdrop-filter:blur(6px);border:1px solid var(--border);
+  }
+  .file-info{padding:11px 12px 12px;min-width:0}
+  .file-name{
+    font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .file-meta{font-size:11.8px;color:var(--muted);margin-top:3px;display:flex;gap:6px;align-items:center}
+  .file-meta .dot{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.6}
+  .file-card .card-actions{
+    position:absolute;top:7px;right:7px;
+    background:color-mix(in srgb, var(--surface) 90%, transparent);
+    border-radius:9px;border:1px solid var(--border);padding:2px;backdrop-filter:blur(6px);
+  }
+
+  /* Files list view */
+  .file-grid.view-list{grid-template-columns:1fr;gap:8px}
+  .view-list .file-card{flex-direction:row;align-items:center;padding:9px 12px;gap:12px;transform:none}
+  .view-list .file-card:hover{transform:none}
+  .view-list .file-thumb{width:42px;height:42px;border-radius:10px;flex:0 0 auto}
+  .view-list .file-thumb .icon{width:20px;height:20px}
+  .view-list .thumb-badge{display:none}
+  .view-list .file-info{padding:0;flex:1;min-width:0}
+  .view-list .file-meta{margin-top:1px}
+  .view-list .card-actions{position:static;opacity:0;background:none;border:0;padding:0;backdrop-filter:none}
+  .view-list .file-card:hover .card-actions,.view-list .file-card:focus-within .card-actions{opacity:1}
+
+  /* Empty state */
+  .empty{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:52px 20px;text-align:center;color:var(--muted);
+  }
+  .empty-icon{
+    width:78px;height:78px;border-radius:24px;display:grid;place-items:center;
+    background:var(--surface-2);border:1px solid var(--border);margin-bottom:16px;
+    color:var(--border-strong);
+  }
+  .empty-icon .icon{width:36px;height:36px}
+  .empty h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:5px}
+  .empty p{font-size:13.5px;max-width:330px}
+
+  /* ---------- Upload panel ---------- */
+  .upload-panel{
+    position:fixed;right:20px;bottom:20px;width:340px;max-width:calc(100vw - 40px);
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    box-shadow:var(--shadow-lg);padding:12px;z-index:70;
+    display:flex;flex-direction:column;gap:10px;
+    max-height:50vh;overflow-y:auto;
+    animation:pop .2s ease;
+  }
+  .upload-item{display:flex;flex-direction:column;gap:6px;animation:pop .18s ease}
+  .upload-head{display:flex;justify-content:space-between;gap:10px;font-size:12.5px}
+  .upload-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .upload-pct{color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .progress{height:6px;border-radius:99px;background:var(--surface-3);overflow:hidden}
+  .progress-fill{
+    height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    transition:width .2s ease;
+  }
+  .upload-item.done .progress-fill{background:var(--success)}
+  .upload-item.error .progress-fill{background:var(--danger)}
+
+  /* ---------- Toasts ---------- */
+  .toasts{
+    position:fixed;top:18px;right:18px;z-index:200;
+    display:flex;flex-direction:column;gap:9px;max-width:min(380px,calc(100vw - 36px));
+    pointer-events:none;
+  }
+  .toast{
+    display:flex;align-items:flex-start;gap:10px;
+    padding:12px 14px;border-radius:13px;background:var(--surface);
+    border:1px solid var(--border);box-shadow:var(--shadow-lg);
+    font-size:13.5px;font-weight:500;line-height:1.45;
+    animation:toastIn .24s cubic-bezier(.2,.9,.3,1.1);
+    pointer-events:auto;
+  }
+  .toast .icon{width:18px;height:18px;margin-top:1px;flex:0 0 auto}
+  .toast-success{border-color:color-mix(in srgb,var(--success) 40%,var(--border))}
+  .toast-success .icon{color:var(--success)}
+  .toast-error{border-color:color-mix(in srgb,var(--danger) 40%,var(--border))}
+  .toast-error .icon{color:var(--danger)}
+  .toast-info .icon{color:var(--accent)}
+  .toast-out{animation:toastOut .22s ease forwards}
+  @keyframes toastIn{from{opacity:0;transform:translateX(24px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes toastOut{to{opacity:0;transform:translateX(24px) scale(.97)}}
+
+  /* ---------- Modals ---------- */
+  .overlay{
+    position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;
+    padding:20px;background:rgba(9,13,26,.52);backdrop-filter:blur(4px);
+    animation:fade .16s ease;
+  }
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .dialog{
+    width:100%;max-width:440px;max-height:88dvh;display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--border);border-radius:18px;
+    box-shadow:var(--shadow-lg);overflow:hidden;
+    animation:pop .2s cubic-bezier(.2,.9,.3,1.1);
+  }
+  .dialog-lg{max-width:900px}
+  .dialog-head{
+    display:flex;align-items:center;gap:12px;padding:16px 18px;
+    border-bottom:1px solid var(--border);flex:0 0 auto;
+  }
+  .dialog-head h2{
+    font-size:15.5px;font-weight:700;flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .dialog-body{padding:18px;overflow:auto;flex:1 1 auto;min-height:0}
+  .dialog-text{font-size:14px;color:var(--text-2);line-height:1.6}
+  .dialog-foot{
+    display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;
+    border-top:1px solid var(--border);flex:0 0 auto;flex-wrap:wrap;
+  }
+
+  /* Preview */
+  .preview-body{display:flex;align-items:center;justify-content:center;min-height:200px}
+  .preview-img{max-width:100%;max-height:65dvh;border-radius:12px;display:block}
+  .preview-frame{width:100%;height:65dvh;border:0;border-radius:12px;background:var(--surface-2)}
+  .preview-text{
+    width:100%;max-height:65dvh;overflow:auto;margin:0;padding:16px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
+    font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+    font-size:12.8px;line-height:1.65;white-space:pre;tab-size:2;
+    color:var(--text);
+  }
+  .preview-note{
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    color:var(--muted);font-size:13.5px;text-align:center;padding:28px 10px;
+  }
+  .preview-note .icon{width:36px;height:36px;color:var(--border-strong)}
+  .tok-kw{color:var(--tok-kw);font-weight:600}
+  .tok-str{color:var(--tok-str)}
+  .tok-com{color:var(--tok-com);font-style:italic}
+  .tok-num{color:var(--tok-num)}
+  .tok-fn{color:var(--tok-fn)}
+  .tok-tag{color:var(--tok-tag)}
+  .tok-attr{color:var(--tok-attr)}
+
+  /* Sidebar backdrop (mobile) */
+  .backdrop{
+    position:fixed;inset:0;background:rgba(9,13,26,.45);z-index:35;
+    animation:fade .16s ease;
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 980px){
+    .app{grid-template-columns:1fr}
+    .sidebar{
+      position:fixed;top:0;left:0;bottom:0;width:min(300px,84vw);
+      transform:translateX(-102%);transition:transform .24s cubic-bezier(.3,.8,.3,1);
+      box-shadow:var(--shadow-lg);
+    }
+    .app.sidebar-open .sidebar{transform:translateX(0)}
+    .sidebar-close{display:inline-flex}
+    .menu-btn{display:inline-flex}
+    .content{padding:18px 16px 100px}
+    .topbar{padding:0 12px;gap:8px}
+    .search-wrap{max-width:none}
+    .topbar-actions .select{display:none}
+  }
+  @media (max-width: 640px){
+    .page-head h1{font-size:19px}
+    .file-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+    .folder-grid{grid-template-columns:1fr}
+    .file-thumb{height:92px}
+    .dropzone{padding:16px}
+    .dz-title{font-size:14px}
+    .auth-card{padding:26px 20px;border-radius:18px}
+    .upload-panel{right:10px;left:10px;bottom:10px;width:auto}
+    .topbar-actions{gap:2px}
+    .avatar{width:34px;height:34px;font-size:13px}
+    .icon-btn{width:34px;height:34px}
+  }
+  @media (max-width: 380px){
+    .file-grid{grid-template-columns:1fr 1fr;gap:8px}
+    .file-thumb{height:78px}
+    .file-name{font-size:12.5px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.001ms !important;transition-duration:.001ms !important}
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== HTML ========== -->
+<!-- ---------- AUTH SCREEN ---------- -->
+<div class="auth" id="authScreen">
+  <div class="auth-card">
+    <div class="brand">
+      <span class="brand-mark" id="authLogo"></span>
+      <span>SaveAsFile</span>
+    </div>
+    <p class="auth-sub">Shaxsiy bulutingiz — brauzeringizda. Fayllar, papkalar va kod.</p>
+
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab active" type="button" data-auth-tab="login" role="tab">Kirish</button>
+      <button class="auth-tab" type="button" data-auth-tab="register" role="tab">Ro'yxatdan o'tish</button>
+    </div>
+
+    <!-- Login -->
+    <form class="auth-form" id="loginForm" novalidate>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <input class="input" type="email" name="email" placeholder="siz@example.com"
+               autocomplete="email" spellcheck="false" required>
+      </label>
+      <label class="field">
+        <span class="field-label">Parol</span>
+        <span class="pw-wrap">
+          <input class="input" type="password" name="password" placeholder="••••••••"
+                 autocomplete="current-password" required>
+          <button class="pw-toggle" type="button" data-pw-toggle aria-label="Parolni ko'rsatish"></button>
+        </span>
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Kirish</button>
+    </form>
+
+    <!-- Register -->
+    <form class="auth-form" id="registerForm" hidden novalidate>
+      <label class="field">
+        <span class="field-label">Ism</span>
+        <input class="input" type="text" name="name" placeholder="Ismingiz"
+               autocomplete="name" maxlength="60" required>
+      </label>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <input class="input" type="email" name="email" placeholder="siz@example.com"
+               autocomplete="email" spellcheck="false" required>
+      </label>
+      <label class="field">
+        <span class="field-label">Parol</span>
+        <span class="pw-wrap">
+          <input class="input" type="password" name="password" placeholder="Kamida 6 belgi"
+                 autocomplete="new-password" required>
+          <button class="pw-toggle" type="button" data-pw-toggle aria-label="Parolni ko'rsatish"></button>
+        </span>
+      </label>
+      <label class="field">
+        <span class="field-label">Parolni tasdiqlash</span>
+        <span class="pw-wrap">
+          <input class="input" type="password" name="confirm" placeholder="Parolni takrorlang"
+                 autocomplete="new-password" required>
+          <button class="pw-toggle" type="button" data-pw-toggle aria-label="Parolni ko'rsatish"></button>
+        </span>
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Hisob yaratish</button>
+    </form>
+
+    <div class="auth-note">
+      <span class="icon" id="authNoteIcon"></span>
+      <span>Bu demo-ilova. Ma'lumotlar faqat shu brauzerda saqlanadi va brauzer xotirasi
+      tozalansa yo'qoladi. Parol xeshi lokal saqlanadi — production uchun backend kerak.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- APP ---------- -->
+<div class="app" id="app" hidden>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar" aria-label="Yon panel">
+    <div class="sidebar-head">
+      <div class="brand" style="font-size:16px">
+        <span class="brand-mark" id="sidebarLogo" style="width:32px;height:32px;border-radius:9px"></span>
+        <span>SaveAsFile</span>
+      </div>
+      <button class="icon-btn sidebar-close" id="sidebarClose" type="button" aria-label="Panelni yopish"></button>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="newFolderBtn" type="button">
+      <span class="icon" id="newFolderIcon"></span> Yangi papka
+    </button>
+
+    <nav class="nav" aria-label="Bo'limlar">
+      <p class="nav-title">Bo'limlar</p>
+      <button class="nav-item active" type="button" data-section="all">
+        <span class="icon" data-icon="files"></span> Barcha fayllar
+        <span class="nav-count" data-count="all">0</span>
+      </button>
+      <button class="nav-item" type="button" data-section="image">
+        <span class="icon" data-icon="image"></span> Rasmlar
+        <span class="nav-count" data-count="image">0</span>
+      </button>
+      <button class="nav-item" type="button" data-section="doc">
+        <span class="icon" data-icon="doc"></span> Hujjatlar
+        <span class="nav-count" data-count="doc">0</span>
+      </button>
+      <button class="nav-item" type="button" data-section="code">
+        <span class="icon" data-icon="code"></span> Kod
+        <span class="nav-count" data-count="code">0</span>
+      </button>
+      <button class="nav-item" type="button" data-section="other">
+        <span class="icon" data-icon="file"></span> Boshqa
+        <span class="nav-count" data-count="other">0</span>
+      </button>
+    </nav>
+
+    <div class="nav">
+      <p class="nav-title">Papkalar</p>
+      <div class="sidebar-folders" id="sidebarFolders"></div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="storage-card">
+        <div class="storage-row"><span>Fayllar</span><strong id="statFiles">0</strong></div>
+        <div class="storage-row"><span>Papkalar</span><strong id="statFolders">0</strong></div>
+        <div class="storage-row"><span>Hajm</span><strong id="statSize">0 B</strong></div>
+      </div>
+      <p class="warn-note">
+        <span class="icon" data-icon="warning"></span>
+        <span>Ma'lumotlar faqat shu brauzerda. Xotira tozalansa — hammasi o'chadi.</span>
+      </p>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Menyu">
+        <span class="icon" data-icon="menu"></span>
+      </button>
+      <div class="search-wrap">
+        <span class="icon" data-icon="search"></span>
+        <input type="search" id="searchInput" placeholder="Fayl nomi bo'yicha qidirish..."
+               autocomplete="off" aria-label="Qidirish">
+      </div>
+      <div class="topbar-actions">
+        <select class="select" id="sortSelect" aria-label="Saralash">
+          <option value="date-desc">Yangi → eski</option>
+          <option value="date-asc">Eski → yangi</option>
+          <option value="size-desc">Katta → kichik</option>
+          <option value="size-asc">Kichik → katta</option>
+          <option value="name-asc">Nom A → Z</option>
+          <option value="name-desc">Nom Z → A</option>
+        </select>
+        <button class="icon-btn" id="viewToggle" type="button" aria-label="Ko'rinish" title="Ko'rinish"></button>
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Mavzu" title="Mavzu"></button>
+        <div class="profile">
+          <button class="avatar" id="profileBtn" type="button" aria-haspopup="menu" aria-expanded="false"></button>
+          <div class="profile-menu" id="profileMenu" hidden role="menu">
+            <div class="profile-head">
+              <p class="profile-name" id="profileName"></p>
+              <p class="profile-email" id="profileEmail"></p>
+            </div>
+            <button class="menu-item danger" id="logoutBtn" type="button" role="menuitem">
+              <span class="icon" data-icon="logout"></span> Chiqish
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+      <div class="breadcrumb" id="breadcrumb"></div>
+
+      <div class="page-head">
+        <h1 id="pageTitle">Barcha fayllar</h1>
+        <p id="pageSub"></p>
+      </div>
+
+      <div class="dropzone" id="dropzone" tabindex="0" role="button"
+           aria-label="Fayl yuklash zonasi">
+        <div class="dz-icon"><span class="icon" data-icon="upload"></span></div>
+        <p class="dz-title">Fayllarni bu yerga tashlang</p>
+        <p class="dz-sub">yoki <button class="link-btn" type="button" id="browseBtn">kompyuterdan tanlang</button></p>
+        <p class="dz-hint">Bir vaqtda bir nechta fayl • Maksimal hajm: 100 MB</p>
+        <input type="file" id="fileInput" multiple hidden>
+      </div>
+
+      <section id="foldersSection" hidden>
+        <h2 class="section-title">Papkalar</h2>
+        <div class="folder-grid" id="foldersGrid"></div>
+      </section>
+
+      <section id="filesSection">
+        <h2 class="section-title" id="filesTitle">Fayllar</h2>
+        <div class="file-grid" id="filesContainer"></div>
+        <div class="empty" id="emptyState" hidden>
+          <div class="empty-icon"><span class="icon" data-icon="folderOpen"></span></div>
+          <h3 id="emptyTitle">Hozircha bo'sh</h3>
+          <p id="emptyText">Fayl yuklang yoki yangi papka yarating — hammasi shu brauzerda saqlanadi.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Upload panel -->
+<div class="upload-panel" id="uploadPanel" hidden aria-live="polite"></div>
+
+<!-- Toasts -->
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<!-- ========== SCRIPTS ========== -->
+<script>
+'use strict';
+
+/* ============================================================================
+   0. KONSTANTALAR (magic string'lar yo'q)
+   ========================================================================== */
+const DB_NAME = 'saveasfile-db';
+const DB_VERSION = 1;
+
+const STORE = {
+  USERS: 'users',
+  FOLDERS: 'folders',
+  FILES: 'files',
+  BLOBS: 'blobs',
+};
+
+const LS_KEY = {
+  SESSION: 'saveasfile.session',
+  THEME: 'saveasfile.theme',
+  VIEW: 'saveasfile.view',
+};
+
+const CATEGORY = {
+  IMAGE: 'image',
+  DOC: 'doc',
+  CODE: 'code',
+  OTHER: 'other',
+};
+
+const SECTION_LABEL = {
+  all: 'Barcha fayllar',
+  image: 'Rasmlar',
+  doc: 'Hujjatlar',
+  code: 'Kod',
+  other: 'Boshqa',
+};
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024;      // 100 MB
+const MAX_TEXT_PREVIEW = 150 * 1024;          // 150 KB — preview limiti
+const THUMB_SIZE = 260;                       // px — rasm thumbnail o'lchami
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MIN_PASSWORD = 6;
+const TOAST_TTL = 3800;
+const UPLOAD_PANEL_HIDE_DELAY = 1600;
+const SORT_DEFAULT = 'date-desc';
+
+const CODE_EXTENSIONS = new Set([
+  'js','mjs','cjs','jsx','ts','tsx','py','pyw','html','htm','xhtml','css','scss','sass','less',
+  'json','jsonc','md','markdown','xml','svg','yml','yaml','toml','ini','cfg','conf','env',
+  'sh','bash','zsh','fish','java','kt','kts','c','h','cpp','cc','cxx','hpp','cs','go','rs',
+  'rb','php','sql','swift','dart','lua','pl','r','vue','svelte','dockerfile','makefile','gradle'
+]);
+
+const DOC_EXTENSIONS = new Set([
+  'pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','tsv','rtf','odt','ods','odp','pages','numbers','key'
+]);
+
+const LANG_BY_EXT = {
+  js:'js', mjs:'js', cjs:'js', jsx:'jsx', ts:'ts', tsx:'tsx',
+  py:'py', pyw:'py', html:'html', htm:'html', xhtml:'html',
+  css:'css', scss:'css', sass:'css', less:'css',
+  json:'json', jsonc:'json', md:'md', markdown:'md',
+  xml:'html', svg:'html', yml:'yml', yaml:'yml', toml:'toml', ini:'ini', cfg:'ini', conf:'ini',
+  sh:'sh', bash:'sh', zsh:'sh', fish:'sh',
+  java:'java', kt:'java', cts:'java', c:'c', h:'c', cpp:'cpp', cc:'cpp', cxx:'cpp', hpp:'cpp',
+  cs:'cs', go:'go', rs:'rs', rb:'rb', php:'php', sql:'sql', swift:'swift', dart:'dart',
+  lua:'lua', pl:'pl', r:'r', vue:'html', svelte:'html',
+};
+
+const HASH_COMMENT_LANGS = new Set(['py','sh','rb','yml','toml','ini','r','pl','conf','env']);
+
+const PASSWORD_ITERATIONS = 12000; // SHA-256 iteratsiyalar soni (demo darajadagi mustahkamlash)
+
+/* ============================================================================
+   1. ICONS (inline SVG, kutubxonasiz)
+   ========================================================================== */
+const svgIcon = (paths, extra = '') =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round" ${extra}>${paths}</svg>`;
+
+const ICONS = {
+  logo: svgIcon('<path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M12 11v5M9.5 13.5 12 11l2.5 2.5"/>'),
+  close: svgIcon('<path d="M18 6 6 18M6 6l12 12"/>'),
+  search: svgIcon('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>'),
+  menu: svgIcon('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  sun: svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  moon: svgIcon('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>'),
+  grid: svgIcon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+  list: svgIcon('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+  plus: svgIcon('<path d="M12 5v14M5 12h14"/>'),
+  folder: svgIcon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'),
+  folderOpen: svgIcon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8a2 2 0 0 1-2 1.6H5A2 2 0 0 1 3 18Z"/>'),
+  file: svgIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/>'),
+  files: svgIcon('<path d="M8 3h6l4 4v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v4h4"/><path d="M4 7v12a2 2 0 0 0 2 2h8"/>'),
+  image: svgIcon('<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m21 16-4.6-4.6L5.4 21"/>'),
+  code: svgIcon('<path d="m9 18-6-6 6-6M15 6l6 6-6 6"/>'),
+  doc: svgIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+  download: svgIcon('<path d="M12 3v12M7 11l5 5 5-5M4 21h16"/>'),
+  trash: svgIcon('<path d="M3 6h18M8 6V4h8v2M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14"/>'),
+  edit: svgIcon('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
+  eye: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: svgIcon('<path d="m3 3 18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A9.6 9.6 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.3 6.3A17.3 17.3 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 4.1-.9"/>'),
+  copy: svgIcon('<rect x="9" y="9" width="12" height="12" rx="2.2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+  logout: svgIcon('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>'),
+  chevron: svgIcon('<path d="m9 18 6-6-6-6"/>'),
+  upload: svgIcon('<path d="M12 21V9M7 13l5-5 5 5M4 3h16"/>'),
+  warning: svgIcon('<path d="M12 9v5M12 18h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'),
+  check: svgIcon('<path d="m20 6-11 11-5-5"/>'),
+  info: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+};
+
+/* ============================================================================
+   2. UTILS
+   ========================================================================== */
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+function iconEl(name, className = '') {
+  const span = document.createElement('span');
+  span.className = ('icon ' + className).trim();
+  span.innerHTML = ICONS[name] || ICONS.file;
+  return span;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function uuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback (eski brauzerlar / insecure context)
+  return 'xxxxxxxx-xxxx
